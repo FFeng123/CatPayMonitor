@@ -32,9 +32,147 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;27.1.12297006"
 
+      - name: Generate Android project
+        run: npx expo prebuild --platform android
+
       - name: Create local.properties
         run: |
           echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+      - name: Add native notification module
+        run: |
+          # Create the package directory
+          mkdir -p android/app/src/main/java/com/anonymous/catpaymonitor
+
+          # Create NotificationMonitorService.kt
+          cat > android/app/src/main/java/com/anonymous/catpaymonitor/NotificationMonitorService.kt << 'KOTLIN_EOF'
+package com.anonymous.catpaymonitor
+
+import android.app.Notification
+import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
+import android.util.Log
+
+class NotificationMonitorService : NotificationListenerService() {
+
+    private val TAG = "NotificationMonitor"
+    private val WECHAT_PACKAGE = "com.tencent.mm"
+    private val ALIPAY_PACKAGE = "com.eg.android.AlipayGphone"
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        sbn ?: return
+        val packageName = sbn.packageName
+        if (packageName != WECHAT_PACKAGE && packageName != ALIPAY_PACKAGE) return
+
+        val notification = sbn.notification
+        val extras = notification.extras
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        val combinedText = "$title $text"
+
+        if (isPaymentNotification(combinedText)) {
+            NotificationMonitorModule.sendNotification(packageName, title, text)
+        }
+    }
+
+    private fun isPaymentNotification(text: String): Boolean {
+        val lowerText = text.lowercase()
+        return lowerText.contains("微信支付") || lowerText.contains("收款") ||
+               lowerText.contains("到账") || lowerText.contains("支付宝")
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {}
+}
+KOTLIN_EOF
+
+          # Create NotificationMonitorModule.kt
+          cat > android/app/src/main/java/com/anonymous/catpaymonitor/NotificationMonitorModule.kt << 'KOTLIN_EOF'
+package com.anonymous.catpaymonitor
+
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
+import android.util.Log
+import com.facebook.react.bridge.*
+import com.facebook.react.modules.core.DeviceEventManagerModule
+
+class NotificationMonitorModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+    private val TAG = "NotificationModule"
+    private var reactCtx: ReactApplicationContext? = null
+
+    init {
+        reactCtx = reactContext
+        NotificationMonitorModule.setCallback { pkg, title, txt -> sendEvent(pkg, title, txt) }
+    }
+
+    private fun sendEvent(pkg: String, title: String, text: String) {
+        val ctx = reactCtx ?: return
+        val params = Arguments.createMap().apply {
+            putString("packageName", pkg)
+            putString("title", title)
+            putString("text", text)
+        }
+        ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("onNotificationReceived", params)
+    }
+
+    override fun getName() = "NotificationMonitorModule"
+
+    @ReactMethod
+    fun startListening(promise: Promise) {
+        try {
+            val ctx = reactApplicationContext
+            val intent = Intent(ctx, NotificationMonitorService::class.java)
+            ctx.bindService(intent, object : ServiceConnection {
+                override fun onServiceConnected(n: ComponentName?, s: IBinder?) {}
+                override fun onServiceDisconnected(n: ComponentName?) {}
+            }, Context.BIND_AUTO_CREATE)
+            ctx.startService(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("ERROR", e.message)
+        }
+    }
+
+    @ReactMethod fun stopListening(promise: Promise) = promise.resolve(true)
+    @ReactMethod fun addListener(s: String) {}
+    @ReactMethod fun removeListeners(i: Int) {}
+
+    companion object {
+        private var callback: ((String, String, String) -> Unit)? = null
+        fun sendNotification(pkg: String, title: String, text: String) = callback?.invoke(pkg, title, text)
+        fun setCallback(cb: (String, String, String) -> Unit) { callback = cb }
+    }
+}
+KOTLIN_EOF
+
+          # Create NotificationMonitorPackage.kt
+          cat > android/app/src/main/java/com/anonymous/catpaymonitor/NotificationMonitorPackage.kt << 'KOTLIN_EOF'
+package com.anonymous.catpaymonitor
+
+import com.facebook.react.ReactPackage
+import com.facebook.react.bridge.ReactApplicationContext
+
+class NotificationMonitorPackage : ReactPackage {
+    override fun createNativeModules(reactContext: ReactApplicationContext) = listOf(NotificationMonitorModule(reactContext))
+    override fun createViewManagers(reactContext: ReactApplicationContext) = emptyList()
+}
+KOTLIN_EOF
+
+      - name: Update MainApplication.kt to register module
+        run: |
+          # Add import and register the package
+          sed -i 's/import expo.modules.ApplicationLifecycleDispatcher/import expo.modules.ApplicationLifecycleDispatcher\nimport com.anonymous.catpaymonitor.NotificationMonitorPackage/' android/app/src/main/java/com/anonymous/catpaymonitor/MainApplication.kt
+          sed -i 's/:: add(MyReactNativePackage())/:: add(NotificationMonitorPackage())/' android/app/src/main/java/com/anonymous/catpaymonitor/MainApplication.kt
+
+      - name: Update AndroidManifest.xml for notification listener
+        run: |
+          # Add permissions
+          sed -i 's/<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE/<uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"\/>\n  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"\/>\n  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE/' android/app/src/main/AndroidManifest.xml
+
+          # Add service
+          sed -i 's/<\/activity>/<\/activity>\n    <service\n      android:name=".NotificationMonitorService"\n      android:exported="false"\n      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">\n      <intent-filter>\n        <action android:name="android.service.notification.NotificationListenerService"\/>\n      <\/intent-filter>\n    <\/service>/' android/app/src/main/AndroidManifest.xml
 
       - name: Create release directory
         run: mkdir -p release
@@ -49,6 +187,10 @@ jobs:
           echo "android.signingConfigs.release.storePassword=android" >> android/gradle.properties
           echo "android.signingConfigs.release.keyAlias=release" >> android/gradle.properties
           echo "android.signingConfigs.release.keyPassword=android" >> android/gradle.properties
+
+      - name: Update build.gradle for release signing
+        run: |
+          sed -i 's/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/' android/app/build.gradle
 
       - name: Build release APK
         run: |
