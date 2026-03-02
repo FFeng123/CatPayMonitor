@@ -148,11 +148,18 @@ jobs:
           echo 'package com.anonymous.CatPayMonitor' > android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
           echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
           echo 'import com.facebook.react.ReactPackage' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
+          echo 'import com.facebook.react.bridge.NativeModule' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
           echo 'import com.facebook.react.bridge.ReactApplicationContext' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
+          echo 'import com.facebook.react.uimanager.ViewManager' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
           echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
           echo 'class NotificationMonitorPackage : ReactPackage {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '    override fun createNativeModules(reactContext: ReactApplicationContext) = listOf(NotificationMonitorModule(reactContext))' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '    override fun createViewManagers(reactContext: ReactApplicationContext) = emptyList()' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
+          echo '    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
+          echo '        return listOf(NotificationMonitorModule(reactContext))' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
+          echo '    }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
+          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
+          echo '    override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
+          echo '        return emptyList()' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
+          echo '    }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
           echo '}' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
 
       - name: Update MainApplication.kt
