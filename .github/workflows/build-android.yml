@@ -1,0 +1,69 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v2
+
+      - name: Install NDK
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;27.1.12297006"
+
+      - name: Create local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+      - name: Create release directory
+        run: mkdir -p release
+
+      - name: Create release keystore
+        run: |
+          keytool -genkeypair -v -storetype PKCS12 -keystore release/keystore.jks -alias release -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=CatPay, OU=CatPay, O=CatPay, L=Beijing, ST=Beijing, C=CN"
+
+      - name: Configure signing in gradle.properties
+        run: |
+          echo "android.signingConfigs.release.storeFile=release/keystore.jks" >> android/gradle.properties
+          echo "android.signingConfigs.release.storePassword=android" >> android/gradle.properties
+          echo "android.signingConfigs.release.keyAlias=release" >> android/gradle.properties
+          echo "android.signingConfigs.release.keyPassword=android" >> android/gradle.properties
+
+      - name: Build release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+          cd ..
+
+      - name: Copy APK to release folder
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk release/CatPayMonitor-release.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CatPayMonitor-release.apk
+          path: release/CatPayMonitor-release.apk
+          retention-days: 30
