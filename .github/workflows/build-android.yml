@@ -1,8 +1,10 @@
-name: Build Android APK
+name: Build and Release
 
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -10,10 +12,23 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.extract_tag.outputs.tag }}
+      version: ${{ steps.extract_tag.outputs.version }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Extract tag version
+        id: extract_tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Tag: $TAG, Version: $VERSION"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -47,6 +62,13 @@ jobs:
       - name: Add signing config to build.gradle
         run: |
           sed -i "s/signingConfigs {/signingConfigs {\n        release {\n            storeFile file('release\/keystore.jks')\n            storePassword 'android'\n            keyAlias 'release'\n            keyPassword 'android'\n        }/" android/app/build.gradle
+
+      - name: Update version in build.gradle
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION=${{ steps.extract_tag.outputs.version }}
+          sed -i "s/versionCode 1/versionCode 1/" android/app/build.gradle
+          sed -i "s/versionName \"1.0.0\"/versionName \"$VERSION\"/" android/app/build.gradle
 
       - name: Create source directory
         run: mkdir -p android/app/src/main/java/com/anonymous/CatPayMonitor
@@ -188,9 +210,21 @@ jobs:
       - name: Copy APK
         run: cp android/app/build/outputs/apk/release/app-release.apk release/CatPayMonitor-release.apk
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: CatPayMonitor-release.apk
           path: release/CatPayMonitor-release.apk
           retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.extract_tag.outputs.tag }}
+          name: Release ${{ steps.extract_tag.outputs.tag }}
+          draft: false
+          prerelease: ${{ contains(steps.extract_tag.outputs.tag, 'beta') || contains(steps.extract_tag.outputs.tag, 'alpha') }}
+          files: release/CatPayMonitor-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
