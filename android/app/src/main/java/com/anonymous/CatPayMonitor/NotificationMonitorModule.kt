@@ -1,4 +1,4 @@
-package com.anonymous.catpaymonitor
+package com.anonymous.CatPayMonitor
 
 import android.content.ComponentName
 import android.content.Context

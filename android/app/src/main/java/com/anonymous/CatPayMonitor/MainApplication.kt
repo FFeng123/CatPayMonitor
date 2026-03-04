@@ -13,7 +13,7 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
-import com.anonymous.catpaymonitor.NotificationMonitorPackage
+import com.anonymous.CatPayMonitor.NotificationMonitorPackage
 
 class MainApplication : Application(), ReactApplication {
 

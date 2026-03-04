@@ -15,9 +15,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.extract_tag.outputs.tag }}
-      version: ${{ steps.extract_tag.outputs.version }}
 
     steps:
       - name: Checkout code
@@ -31,7 +28,6 @@ jobs:
           VERSION=${TAG#v}
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Tag: $TAG, Version: $VERSION"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -50,164 +46,31 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;27.1.12297006"
 
-      - name: Clean previous build
-        run: rm -rf android
-
-      - name: Reinstall dependencies
-        run: npm ci
-
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean
+
+      - name: Restore native module files
+        run: |
+          mkdir -p android/app/src/main/java/com/anonymous/CatPayMonitor
+          git restore android/app/src/main/java/com/anonymous/CatPayMonitor/
 
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
-      - name: Add signing config to build.gradle
+      - name: Add signing config
         run: |
           sed -i "s/signingConfigs {/signingConfigs {\n        release {\n            storeFile file('release\/keystore.jks')\n            storePassword 'android'\n            keyAlias 'release'\n            keyPassword 'android'\n        }/" android/app/build.gradle
 
-      - name: Update version in build.gradle
+      - name: Update version
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           VERSION=${{ steps.extract_tag.outputs.version }}
-          sed -i "s/versionCode 1/versionCode 1/" android/app/build.gradle
           sed -i "s/versionName \"1.0.0\"/versionName \"$VERSION\"/" android/app/build.gradle
-
-      - name: Create source directory
-        run: mkdir -p android/app/src/main/java/com/anonymous/CatPayMonitor
-
-      - name: Create NotificationMonitorService.kt
-        run: |
-          echo 'package com.anonymous.CatPayMonitor' > android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo 'import android.app.Notification' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo 'import android.service.notification.NotificationListenerService' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo 'import android.service.notification.StatusBarNotification' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo 'class NotificationMonitorService : NotificationListenerService() {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '    private val TAG = "NotificationMonitor"' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '    private val WECHAT_PACKAGE = "com.tencent.mm"' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '    private val ALIPAY_PACKAGE = "com.eg.android.AlipayGphone"' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '    override fun onNotificationPosted(sbn: StatusBarNotification?) {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '        sbn ?: return' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '        val packageName = sbn.packageName' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '        if (packageName != WECHAT_PACKAGE && packageName != ALIPAY_PACKAGE) return' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '        val notification = sbn.notification' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '        val extras = notification.extras' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '        if (isPaymentNotification("$title $text")) {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '            NotificationMonitorModule.sendNotification(packageName, title, text)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '        }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '    }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '    private fun isPaymentNotification(text: String): Boolean {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '        val lowerText = text.lowercase()' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '        return lowerText.contains("微信支付") || lowerText.contains("收款") ||' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '               lowerText.contains("到账") || lowerText.contains("支付宝")' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '    }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-          echo '}' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorService.kt
-
-      - name: Create NotificationMonitorModule.kt
-        run: |
-          echo 'package com.anonymous.CatPayMonitor' > android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo 'import android.content.ComponentName' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo 'import android.content.Context' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo 'import android.content.Intent' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo 'import android.content.ServiceConnection' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo 'import android.os.IBinder' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo 'import com.facebook.react.bridge.*' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo 'import com.facebook.react.modules.core.DeviceEventManagerModule' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo 'class NotificationMonitorModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    private var reactCtx: ReactApplicationContext? = null' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    init {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        reactCtx = reactContext' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        NotificationMonitorModule.setCallback { pkg, title, txt -> sendEvent(pkg, title, txt) }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    private fun sendEvent(pkg: String, title: String, text: String) {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        val ctx = reactCtx ?: return' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        val params = Arguments.createMap().apply {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '            putString("packageName", pkg)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '            putString("title", title)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '            putString("text", text)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("onNotificationReceived", params)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    override fun getName() = "NotificationMonitorModule"' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    @ReactMethod' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    fun startListening(promise: Promise) {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        try {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '            val ctx = reactApplicationContext' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '            val intent = Intent(ctx, NotificationMonitorService::class.java)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '            ctx.bindService(intent, object : ServiceConnection {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '                override fun onServiceConnected(n: ComponentName?, s: IBinder?) {}' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '                override fun onServiceDisconnected(n: ComponentName?) {}' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '            }, Context.BIND_AUTO_CREATE)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '            ctx.startService(intent)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '            promise.resolve(true)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        } catch (e: Exception) {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '            promise.reject("ERROR", e.message)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    @ReactMethod fun stopListening(promise: Promise) = promise.resolve(true)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    @ReactMethod fun addListener(s: String) {}' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    @ReactMethod fun removeListeners(i: Int) {}' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    companion object {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        private var callback: ((String, String, String) -> Unit)? = null' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        fun sendNotification(pkg: String, title: String, text: String) = callback?.invoke(pkg, title, text)' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '        fun setCallback(cb: (String, String, String) -> Unit) { callback = cb }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '    }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-          echo '}' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorModule.kt
-
-      - name: Create NotificationMonitorPackage.kt
-        run: |
-          echo 'package com.anonymous.CatPayMonitor' > android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo 'import com.facebook.react.ReactPackage' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo 'import com.facebook.react.bridge.NativeModule' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo 'import com.facebook.react.bridge.ReactApplicationContext' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo 'import com.facebook.react.uimanager.ViewManager' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo 'class NotificationMonitorPackage : ReactPackage {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '        return listOf(NotificationMonitorModule(reactContext))' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '    }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '    override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '        return emptyList()' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '    }' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-          echo '}' >> android/app/src/main/java/com/anonymous/CatPayMonitor/NotificationMonitorPackage.kt
-
-      - name: Update MainApplication.kt
-        run: |
-          sed -i 's/import expo.modules.ApplicationLifecycleDispatcher/import expo.modules.ApplicationLifecycleDispatcher\nimport com.anonymous.CatPayMonitor.NotificationMonitorPackage/' android/app/src/main/java/com/anonymous/CatPayMonitor/MainApplication.kt
-          sed -i 's/: add(MyReactNativePackage())/: add(NotificationMonitorPackage())/' android/app/src/main/java/com/anonymous/CatPayMonitor/MainApplication.kt
-
-      - name: Update AndroidManifest.xml
-        run: |
-          sed -i 's|<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE|  <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"/>\n  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE|' android/app/src/main/AndroidManifest.xml
-          sed -i 's|</activity>|</activity>\n    <service\n      android:name=".NotificationMonitorService"\n      android:exported="true"\n      android:label="CatPayMonitor"\n      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">\n      <intent-filter>\n        <action android:name="android.service.notification.NotificationListenerService"/>\n      </intent-filter>\n    </service>|' android/app/src/main/AndroidManifest.xml
-          sed -i 's|<application|<application android:usesCleartextTraffic="true"|' android/app/src/main/AndroidManifest.xml
-
-      - name: Create release directory and keystore
-        run: |
-          mkdir -p release
-          keytool -genkeypair -v -storetype PKCS12 -keystore release/keystore.jks -alias release -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=CatPay, OU=CatPay, O=CatPay, L=Beijing, ST=Beijing, C=CN"
 
       - name: Build release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew clean
           ./gradlew assembleRelease
           cd ..
 

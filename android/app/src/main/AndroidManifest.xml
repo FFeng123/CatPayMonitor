@@ -25,7 +25,8 @@
     </activity>
     <service
       android:name=".NotificationMonitorService"
-      android:exported="false"
+      android:exported="true"
+      android:label="CatPayMonitor"
       android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
       <intent-filter>
         <action android:name="android.service.notification.NotificationListenerService"/>

@@ -1,4 +1,4 @@
-package com.anonymous.catpaymonitor
+package com.anonymous.CatPayMonitor
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule
