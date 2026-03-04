@@ -31,7 +31,7 @@ class NotificationMonitorModule(reactContext: ReactApplicationContext) :
     }
 
     init {
-        reactContext = reactContext
+        this.reactContext = reactContext
         // Set up callback to send events to React Native
         NotificationMonitorModule.setCallback { packageName, title, text ->
             sendEventToReactNative(packageName, title, text)
